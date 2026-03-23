@@ -1,0 +1,35 @@
+{
+  "name": "financas-app",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web"
+  },
+  "dependencies": {
+    "@react-navigation/drawer": "^7.9.6",
+    "@react-navigation/native": "^7.2.0",
+    "@react-navigation/native-stack": "^7.14.7",
+    "expo": "~55.0.8",
+    "expo-sqlite": "~55.0.11",
+    "expo-status-bar": "~55.0.4",
+    "nativewind": "^4.2.3",
+    "react": "19.2.0",
+    "react-native": "0.83.2",
+    "react-native-android-widget": "^0.20.1",
+    "react-native-gesture-handler": "~2.30.0",
+    "react-native-mmkv": "^4.3.0",
+    "react-native-reanimated": "4.2.1",
+    "react-native-safe-area-context": "~5.6.2",
+    "react-native-screens": "~4.23.0",
+    "zustand": "^5.0.12"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "tailwindcss": "^3.3.2",
+    "typescript": "~5.9.2"
+  },
+  "private": true
+}
