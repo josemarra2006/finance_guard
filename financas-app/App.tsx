@@ -1,4 +1,5 @@
 // caminho: App.tsx
+import 'expo-dev-client';
 import './global.css';
 
 import { NavigationContainer } from '@react-navigation/native';
