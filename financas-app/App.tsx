@@ -14,10 +14,11 @@ import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SQLiteProvider } from 'expo-sqlite';
 
-import AppNavigator from './src/navigation/AppNavigator';
+import { AuthProvider } from './src/contexts/AuthContext';
+import RootNavigator from './src/navigation/RootNavigator';
 import { migrateDbIfNeeded, DATABASE_NAME } from './src/database/db';
 
-// ─── Loading screen ───────────────────────────────────────────────────────────
+// ─── Loading screen do banco ──────────────────────────────────────────────────
 /**
  * Exibida pelo <Suspense> enquanto o SQLiteProvider executa o `onInit`
  * (criação/migração das tabelas). Normalmente dura menos de 200ms.
@@ -33,20 +34,23 @@ function DatabaseLoadingScreen(): React.JSX.Element {
 
 // ─── App ─────────────────────────────────────────────────────────────────────
 /**
- * Hierarquia de providers:
+ * Hierarquia completa de providers (ordem é obrigatória):
  *
- *  GestureHandlerRootView   ← obrigatório para react-navigation/drawer e gesture-handler
- *    Suspense               ← exibe DatabaseLoadingScreen enquanto o SQLiteProvider inicializa
- *      SQLiteProvider       ← abre o banco e executa migrateDbIfNeeded antes de renderizar filhos
- *        NavigationContainer  ← gerencia o estado de navegação
- *          AppNavigator     ← DrawerNavigator com as telas do app
+ *  GestureHandlerRootView   ← mais externo — obrigatório para Drawer e gestos
+ *    Suspense               ← fallback visual enquanto SQLiteProvider inicializa
+ *      SQLiteProvider       ← abre o banco SQLite e executa migrações
+ *        AuthProvider       ← gerencia sessão Supabase (login/logout)
+ *          NavigationContainer ← gerencia o estado de navegação
+ *            StatusBar      ← controla a barra de status do sistema
+ *            RootNavigator  ← decide entre AuthScreen ou AppNavigator
  *
- * Ordem importante:
- *  - GestureHandlerRootView deve ser o elemento mais externo.
- *  - SQLiteProvider deve envolver toda a navegação para que os hooks
- *    `useTransactions` e `useGoals` (que chamam `useSQLiteContext()`)
- *    possam ser usados em qualquer tela.
- *  - A store Zustand/MMKV não precisa de provider — pode ser importada diretamente.
+ * Por que essa ordem?
+ *  - SQLiteProvider antes do AuthProvider: os hooks de banco (useTransactions,
+ *    useGoals) podem ser chamados em telas autenticadas sem risco de o banco
+ *    ainda não ter sido inicializado.
+ *  - AuthProvider antes do NavigationContainer: o RootNavigator precisa do
+ *    contexto de auth para decidir qual tela renderizar na inicialização.
+ *  - A store Zustand/MMKV não precisa de provider — importada diretamente.
  */
 export default function App(): React.JSX.Element {
   return (
@@ -57,10 +61,12 @@ export default function App(): React.JSX.Element {
           onInit={migrateDbIfNeeded}
           useSuspense
         >
-          <NavigationContainer>
-            <StatusBar style="light" />
-            <AppNavigator />
-          </NavigationContainer>
+          <AuthProvider>
+            <NavigationContainer>
+              <StatusBar style="light" />
+              <RootNavigator />
+            </NavigationContainer>
+          </AuthProvider>
         </SQLiteProvider>
       </Suspense>
     </GestureHandlerRootView>
@@ -68,10 +74,6 @@ export default function App(): React.JSX.Element {
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
-/**
- * Usa StyleSheet (não NativeWind) porque estes componentes são renderizados
- * fora da árvore NativeWind durante o loading do banco.
- */
 const styles = StyleSheet.create({
   root: {
     flex: 1,
