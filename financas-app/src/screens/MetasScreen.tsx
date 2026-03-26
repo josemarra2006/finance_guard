@@ -1,22 +1,19 @@
 // caminho: src/screens/MetasScreen.tsx
 import React from 'react';
-import { View, Text } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import GoalsStack from '../navigation/GoalsStack';
 
-import type { MetasScreenProps } from '../types/navigation';
-
-export default function MetasScreen(_props: MetasScreenProps) {
-  return (
-    <SafeAreaView className="flex-1 bg-gray-50" edges={['bottom']}>
-      <View className="flex-1 items-center justify-center px-6">
-        <Text className="text-6xl mb-4">🎯</Text>
-        <Text className="text-gray-800 text-2xl font-bold mb-2">Metas</Text>
-        <Text className="text-gray-400 text-sm text-center leading-relaxed">
-          Defina e acompanhe suas metas financeiras,{'\n'}
-          como o apartamento em Ponta Grossa.{'\n'}
-          Em construção — disponível na próxima fase.
-        </Text>
-      </View>
-    </SafeAreaView>
-  );
+/**
+ * Ponto de entrada da aba "Metas" no Drawer Navigator.
+ *
+ * Esta tela funciona apenas como wrapper do `GoalsStack`.
+ * Todo o conteúdo visual, lógica e navegação vivem dentro do Stack.
+ *
+ * Por que um wrapper separado?
+ *  - O DrawerNavigator precisa de um componente React para a rota "Metas".
+ *  - O GoalsStack precisa de um StackNavigator próprio para manter histórico
+ *    de navegação interno (GoalsMain → GoalDetails) sem interferir no Drawer.
+ *  - Separar os dois evita que o botão "Voltar" do Stack conflite com o Drawer.
+ */
+export default function MetasScreen(): React.JSX.Element {
+  return <GoalsStack />;
 }

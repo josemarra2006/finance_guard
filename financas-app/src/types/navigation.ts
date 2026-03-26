@@ -58,3 +58,28 @@ export type ReportsMesesScreenProps =
 
 export type ReportsTransacoesScreenProps =
   NativeStackScreenProps<ReportsStackParamList, 'ReportsTransacoes'>;
+
+// ─── Goals Stack (navegação interna da aba Metas) ─────────────────────────────
+
+/**
+ * Define os parâmetros de cada rota do Stack interno de Metas.
+ *
+ * GoalsMain    → lista de metas com botão de criar nova meta
+ * GoalDetails  → detalhes da meta com barra de progresso e análise da IA
+ */
+export type GoalsStackParamList = {
+  GoalsMain: undefined;
+  GoalDetails: {
+    /** ID da meta no banco SQLite */
+    goalId: number;
+    /** Nome da meta para exibir no header */
+    goalName: string;
+  };
+};
+
+// Props tipadas para cada tela do Stack de Metas
+export type GoalsMainScreenProps =
+  NativeStackScreenProps<GoalsStackParamList, 'GoalsMain'>;
+
+export type GoalDetailsScreenProps =
+  NativeStackScreenProps<GoalsStackParamList, 'GoalDetails'>;
