@@ -1,94 +1,102 @@
-import 'react-native-url-polyfill/auto';
 // caminho: App.tsx
-import 'expo-dev-client';
-import './global.css';
+/**
+ * IMPORTANTE: 'react-native-gesture-handler' deve ser o PRIMEIRO import
+ * do arquivo de entrada. Isso é exigido pela biblioteca para interceptar
+ * gestos corretamente antes que qualquer outro código seja executado.
+ */
+import 'react-native-gesture-handler';
 
-import React, { Suspense } from 'react';
-import {
-  View,
-  ActivityIndicator,
-  StyleSheet,
-  Text,
-} from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
-import { StatusBar } from 'expo-status-bar';
+import React from 'react';
+import { View, StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { NavigationContainer } from '@react-navigation/native';
 import { SQLiteProvider } from 'expo-sqlite';
+import { useColorScheme } from 'nativewind';
 
+import { ThemeProvider } from './src/contexts/ThemeContext';
 import { AuthProvider } from './src/contexts/AuthContext';
 import RootNavigator from './src/navigation/RootNavigator';
-import { migrateDbIfNeeded, DATABASE_NAME } from './src/database/db';
+import { DATABASE_NAME, migrateDbIfNeeded } from './src/database/db';
 
-// ─── Loading screen do banco ──────────────────────────────────────────────────
+// ─── AppShell ─────────────────────────────────────────────────────────────────
+
 /**
- * Exibida pelo <Suspense> enquanto o SQLiteProvider executa o `onInit`
- * (criação/migração das tabelas). Normalmente dura menos de 200ms.
+ * AppShell é um componente interno separado para poder consumir o contexto
+ * do NativeWind (que é inicializado pelo ThemeProvider acima dele na árvore).
+ *
+ * Responsabilidade exclusiva: aplicar a classe `dark` ao View raiz quando
+ * o tema resolvido for escuro.
+ *
+ * Mecânica do NativeWind v4 com darkMode: 'class':
+ *  - `setColorScheme()` (chamado no ThemeProvider) atualiza o estado interno do NativeWind.
+ *  - `useColorScheme()` do NativeWind reflete esse estado.
+ *  - Ao aplicar className="dark" ao View raiz, TODOS os descendentes com
+ *    variantes `dark:` são ativados (ex: `dark:bg-slate-900`, `dark:text-white`).
+ *  - Sem essa classe no root View, nenhuma variante `dark:` funciona — mesmo
+ *    que `setColorScheme('dark')` tenha sido chamado.
  */
-function DatabaseLoadingScreen(): React.JSX.Element {
+function AppShell(): React.JSX.Element {
+  const { colorScheme } = useColorScheme();
+
   return (
-    <View style={styles.loadingContainer}>
-      <ActivityIndicator size="large" color="#2f78f0" />
-      <Text style={styles.loadingText}>Inicializando banco de dados…</Text>
+    /*
+     * O `style={styles.root}` garante flex: 1 via StyleSheet (sem NativeWind).
+     * O `className` aplica ou remove a classe `dark` com base no esquema atual.
+     * Ambos podem coexistir no mesmo componente — o StyleSheet lida com layout,
+     * o NativeWind lida com theming.
+     */
+    <View
+      style={styles.root}
+      className={colorScheme === 'dark' ? 'dark' : ''}
+    >
+      <NavigationContainer>
+        <RootNavigator />
+      </NavigationContainer>
     </View>
   );
 }
 
 // ─── App ─────────────────────────────────────────────────────────────────────
+
 /**
- * Hierarquia completa de providers (ordem é obrigatória):
+ * Árvore de providers do aplicativo (de fora para dentro):
  *
- *  GestureHandlerRootView   ← mais externo — obrigatório para Drawer e gestos
- *    Suspense               ← fallback visual enquanto SQLiteProvider inicializa
- *      SQLiteProvider       ← abre o banco SQLite e executa migrações
- *        AuthProvider       ← gerencia sessão Supabase (login/logout)
- *          NavigationContainer ← gerencia o estado de navegação
- *            StatusBar      ← controla a barra de status do sistema
- *            RootNavigator  ← decide entre AuthScreen ou AppNavigator
+ * GestureHandlerRootView   — necessário para react-native-gesture-handler
+ *   SafeAreaProvider       — fornece contexto de safe area para toda a árvore
+ *     ThemeProvider        — sincroniza NativeWind colorScheme + expõe accentColor
+ *       SQLiteProvider     — inicializa o banco e roda as migrações antes de renderizar filhos
+ *         AuthProvider     — gerencia sessão Supabase Auth (login/cadastro/logout)
+ *           AppShell       — aplica a classe `dark` ao root View e monta a navegação
  *
- * Por que essa ordem?
- *  - SQLiteProvider antes do AuthProvider: os hooks de banco (useTransactions,
- *    useGoals) podem ser chamados em telas autenticadas sem risco de o banco
- *    ainda não ter sido inicializado.
- *  - AuthProvider antes do NavigationContainer: o RootNavigator precisa do
- *    contexto de auth para decidir qual tela renderizar na inicialização.
- *  - A store Zustand/MMKV não precisa de provider — importada diretamente.
+ * Ordem de dependências:
+ *  - ThemeProvider precisa estar ANTES do AppShell (para fornecer o context ao useColorScheme).
+ *  - SQLiteProvider precisa estar ANTES de qualquer screen que use hooks SQLite.
+ *  - AuthProvider precisa estar ANTES do RootNavigator (que decide a rota inicial).
  */
 export default function App(): React.JSX.Element {
   return (
     <GestureHandlerRootView style={styles.root}>
-      <Suspense fallback={<DatabaseLoadingScreen />}>
-        <SQLiteProvider
-          databaseName={DATABASE_NAME}
-          onInit={migrateDbIfNeeded}
-          useSuspense
-        >
-          <AuthProvider>
-            <NavigationContainer>
-              <StatusBar style="light" />
-              <RootNavigator />
-            </NavigationContainer>
-          </AuthProvider>
-        </SQLiteProvider>
-      </Suspense>
+      <SafeAreaProvider>
+        <ThemeProvider>
+          <SQLiteProvider
+            databaseName={DATABASE_NAME}
+            onInit={migrateDbIfNeeded}
+          >
+            <AuthProvider>
+              <AppShell />
+            </AuthProvider>
+          </SQLiteProvider>
+        </ThemeProvider>
+      </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-  },
-  loadingContainer: {
-    flex: 1,
-    backgroundColor: '#0f2044',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 16,
-  },
-  loadingText: {
-    color: '#9ebcf8',
-    fontSize: 14,
-    fontWeight: '500',
   },
 });

@@ -8,31 +8,38 @@ import {
   ScrollView,
   Alert,
   StyleSheet,
-  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { ConfiguracoesScreenProps } from '../types/navigation';
 import { useSettingsStore } from '../store/useSettingsStore';
+import type { Theme } from '../store/useSettingsStore';
 import { useAuth } from '../contexts/AuthContext';
+import { useAppTheme, ACCENT_PRESETS, hexAlpha } from '../contexts/ThemeContext';
 
-// ─── Constantes de cor ────────────────────────────────────────────────────────
+// ─── Constantes semânticas de cor ─────────────────────────────────────────────
+//
+// Estas cores são FIXAS e nunca são substituídas pelo accentColor.
+// Representam estados financeiros (entrada, gasto, economia) e devem ser
+// consistentes com o resto do app para não confundir o usuário.
 
-const COLORS = {
-  navy: '#0f2044',
-  primary: '#2f78f0',
-  income: { bg: '#f0fdf4', border: '#bbf7d0', text: '#16a34a' },
+const SEMANTIC = {
+  income:  { bg: '#f0fdf4', border: '#bbf7d0', text: '#16a34a' },
   expense: { bg: '#fef2f2', border: '#fecaca', text: '#dc2626' },
   savings: { bg: '#eff6ff', border: '#bfdbfe', text: '#2563eb' },
-  purple: { bg: '#faf5ff', border: '#e9d5ff', text: '#7c3aed' },
+  purple:  { bg: '#faf5ff', border: '#e9d5ff', text: '#7c3aed' },
 };
 
-// ─── Utilitário ───────────────────────────────────────────────────────────────
+// ─── Opções de tema ───────────────────────────────────────────────────────────
 
-/**
- * Formata um número como moeda BRL para exibição.
- * @example formatCurrency(5000) → "R$ 5.000,00"
- */
+const THEME_OPTIONS: { value: Theme; label: string; emoji: string }[] = [
+  { value: 'light',  label: 'Claro',   emoji: '☀️' },
+  { value: 'dark',   label: 'Escuro',  emoji: '🌙' },
+  { value: 'system', label: 'Sistema', emoji: '⚙️' },
+];
+
+// ─── Utilitários ──────────────────────────────────────────────────────────────
+
 function formatCurrency(value: number): string {
   return 'R$ ' + Math.abs(value)
     .toFixed(2)
@@ -40,10 +47,6 @@ function formatCurrency(value: number): string {
     .replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 }
 
-/**
- * Mascara parcialmente uma chave de API para exibição segura.
- * @example maskApiKey("gsk_abc123xyz789") → "gsk_abc•••••789"
- */
 function maskApiKey(key: string): string {
   if (key.length <= 10) return '•'.repeat(key.length);
   const start = key.slice(0, 7);
@@ -53,27 +56,38 @@ function maskApiKey(key: string): string {
 
 // ─── Componente ──────────────────────────────────────────────────────────────
 
-export default function ConfiguracoesScreen(_props: ConfiguracoesScreenProps): React.JSX.Element {
-  // ── Zustand store ───────────────────────────────────────────────────────
-  const userName = useSettingsStore((s) => s.userName);
-  const monthlyIncome = useSettingsStore((s) => s.monthlyIncome);
-  const groqApiKey = useSettingsStore((s) => s.groqApiKey);
-  const setUserName = useSettingsStore((s) => s.setUserName);
-  const setMonthlyIncome = useSettingsStore((s) => s.setMonthlyIncome);
-  const setGroqApiKey = useSettingsStore((s) => s.setGroqApiKey);
-  const resetSettings = useSettingsStore((s) => s.resetSettings);
+export default function ConfiguracoesScreen(
+  _props: ConfiguracoesScreenProps,
+): React.JSX.Element {
+  // ── Tema dinâmico ──────────────────────────────────────────────────────
+  const { accentColor, isDark } = useAppTheme();
 
-  // ── Auth (para logout) ─────────────────────────────────────────────────
+  // ── Zustand store ─────────────────────────────────────────────────────
+  const userName        = useSettingsStore((s) => s.userName);
+  const monthlyIncome   = useSettingsStore((s) => s.monthlyIncome);
+  const groqApiKey      = useSettingsStore((s) => s.groqApiKey);
+  const theme           = useSettingsStore((s) => s.theme);
+  const storedAccent    = useSettingsStore((s) => s.accentColor);
+
+  const setUserName     = useSettingsStore((s) => s.setUserName);
+  const setMonthlyIncome = useSettingsStore((s) => s.setMonthlyIncome);
+  const setGroqApiKey   = useSettingsStore((s) => s.setGroqApiKey);
+  const setTheme        = useSettingsStore((s) => s.setTheme);
+  const setAccentColor  = useSettingsStore((s) => s.setAccentColor);
+  const resetSettings   = useSettingsStore((s) => s.resetSettings);
+
+  // ── Auth ──────────────────────────────────────────────────────────────
   const { signOut, profile } = useAuth();
 
-  // ── Estado local dos campos editáveis ──────────────────────────────────
-  const [editName, setEditName] = useState<string>(userName);
+  // ── Estado local dos campos editáveis (Perfil + API Key) ──────────────
+  // Tema e cor aplicam imediatamente via Zustand — não precisam de estado local.
+  const [editName,   setEditName]   = useState<string>(userName);
   const [editIncome, setEditIncome] = useState<string>(
-    monthlyIncome > 0 ? String(monthlyIncome) : ''
+    monthlyIncome > 0 ? String(monthlyIncome) : '',
   );
-  const [editApiKey, setEditApiKey] = useState<string>(groqApiKey);
-  const [showApiKey, setShowApiKey] = useState<boolean>(false);
-  const [saved, setSaved] = useState<boolean>(false);
+  const [editApiKey,  setEditApiKey]  = useState<string>(groqApiKey);
+  const [showApiKey,  setShowApiKey]  = useState<boolean>(false);
+  const [saved,       setSaved]       = useState<boolean>(false);
 
   // Sincroniza se o store mudar externamente (ex: reset)
   useEffect(() => {
@@ -82,12 +96,10 @@ export default function ConfiguracoesScreen(_props: ConfiguracoesScreenProps): R
     setEditApiKey(groqApiKey);
   }, [userName, monthlyIncome, groqApiKey]);
 
-  // ── Salvar alterações ──────────────────────────────────────────────────
+  // ── Salvar Perfil + API Key ────────────────────────────────────────────
   const handleSave = useCallback((): void => {
-    // Nome
     setUserName(editName.trim());
 
-    // Renda mensal
     const parsedIncome = parseFloat(editIncome.replace(',', '.'));
     if (!isNaN(parsedIncome) && parsedIncome >= 0) {
       setMonthlyIncome(parsedIncome);
@@ -95,15 +107,13 @@ export default function ConfiguracoesScreen(_props: ConfiguracoesScreenProps): R
       setMonthlyIncome(0);
     }
 
-    // Chave API Groq
     setGroqApiKey(editApiKey.trim());
 
-    // Feedback visual
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   }, [editName, editIncome, editApiKey, setUserName, setMonthlyIncome, setGroqApiKey]);
 
-  // ── Resetar configurações ─────────────────────────────────────────────
+  // ── Resetar ────────────────────────────────────────────────────────────
   const handleReset = useCallback((): void => {
     Alert.alert(
       'Resetar configurações',
@@ -121,27 +131,23 @@ export default function ConfiguracoesScreen(_props: ConfiguracoesScreenProps): R
             setShowApiKey(false);
           },
         },
-      ]
+      ],
     );
   }, [resetSettings]);
 
-  // ── Logout ────────────────────────────────────────────────────────────
+  // ── Logout ─────────────────────────────────────────────────────────────
   const handleLogout = useCallback((): void => {
     Alert.alert(
       'Sair da conta',
       'Você será desconectado. Seus dados locais serão mantidos.',
       [
         { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Sair',
-          style: 'destructive',
-          onPress: () => signOut(),
-        },
-      ]
+        { text: 'Sair', style: 'destructive', onPress: () => signOut() },
+      ],
     );
   }, [signOut]);
 
-  // ── Verifica se há mudanças não salvas ─────────────────────────────────
+  // ── Dirty check (apenas Perfil + API Key) ─────────────────────────────
   const hasChanges =
     editName.trim() !== userName ||
     editApiKey.trim() !== groqApiKey ||
@@ -150,51 +156,91 @@ export default function ConfiguracoesScreen(_props: ConfiguracoesScreenProps): R
       return !isNaN(parsed) ? parsed !== monthlyIncome : monthlyIncome !== 0;
     })();
 
+  // ── Paleta de cores dinâmica baseada em isDark ──────────────────────────
+  // Computada uma vez por render para uso em todos os elementos da tela.
+  const palette = {
+    screenBg:      isDark ? '#0f172a' : '#f9fafb',
+    cardBg:        isDark ? '#1e293b' : '#ffffff',
+    cardBorder:    isDark ? '#334155' : '#e5e7eb',
+    sectionTitle:  isDark ? '#f1f5f9' : '#0f2044',
+    subtitleText:  isDark ? '#94a3b8' : '#6b7280',
+    labelText:     isDark ? '#cbd5e1' : '#374151',
+    inputBg:       isDark ? '#0f172a' : '#f9fafb',
+    inputBorder:   isDark ? '#334155' : '#e5e7eb',
+    inputText:     isDark ? '#f1f5f9' : '#1f2937',
+    hintText:      isDark ? '#64748b' : '#9ca3af',
+    readOnlyBg:    isDark ? '#334155' : '#f3f4f6',
+    readOnlyBadge: isDark ? '#475569' : '#e5e7eb',
+    toggleBtnBg:   isDark ? '#334155' : '#f3f4f6',
+    logoutBg:      isDark ? '#1e293b' : '#f9fafb',
+    footerText:    isDark ? '#475569' : '#d1d5db',
+    badgeBg:       isDark ? '#1e293b' : '#f3f4f6',
+  };
+
+  // ── Render ────────────────────────────────────────────────────────────
   return (
-    <SafeAreaView style={styles.safeArea} edges={['bottom']}>
+    <SafeAreaView
+      style={[styles.safeArea, { backgroundColor: palette.screenBg }]}
+      edges={['bottom']}
+    >
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {/* ── Cabeçalho ──────────────────────────────────────────────── */}
+
+        {/* ── Cabeçalho da tela ───────────────────────────────────── */}
         <View style={styles.screenHeader}>
           <View>
-            <Text style={styles.screenTitle}>Configurações</Text>
-            <Text style={styles.screenSubtitle}>
+            <Text style={[styles.screenTitle, { color: palette.sectionTitle }]}>
+              Configurações
+            </Text>
+            <Text style={[styles.screenSubtitle, { color: palette.subtitleText }]}>
               Personalize o app e configure integrações
             </Text>
           </View>
-          <View style={styles.headerBadge}>
+          <View style={[styles.headerBadge, { backgroundColor: palette.badgeBg }]}>
             <Text style={styles.headerBadgeText}>⚙️</Text>
           </View>
         </View>
 
-        {/* ── Feedback de salvo ───────────────────────────────────────── */}
+        {/* ── Banner de sucesso ──────────────────────────────────── */}
         {saved && (
           <View style={styles.savedBanner}>
             <Text style={styles.savedBannerText}>✓ Configurações salvas com sucesso!</Text>
           </View>
         )}
 
-        {/* ══════════════════════════════════════════════════════════════ */}
-        {/* SEÇÃO 1: PERFIL */}
-        {/* ══════════════════════════════════════════════════════════════ */}
-        <View style={styles.sectionCard}>
+        {/* ══════════════════════════════════════════════════════════
+            SEÇÃO 1: PERFIL
+        ══════════════════════════════════════════════════════════ */}
+        <View style={[styles.sectionCard, {
+          backgroundColor: palette.cardBg,
+          borderColor:     palette.cardBorder,
+        }]}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionEmoji}>👤</Text>
-            <Text style={styles.sectionTitle}>Perfil</Text>
+            <Text style={[styles.sectionTitle, { color: palette.sectionTitle }]}>
+              Perfil
+            </Text>
           </View>
 
           {/* Email (somente leitura, vem do Supabase) */}
           {profile?.email ? (
             <View style={styles.fieldContainer}>
-              <Text style={styles.fieldLabel}>Email</Text>
-              <View style={styles.readOnlyField}>
-                <Text style={styles.readOnlyText}>{profile.email}</Text>
-                <View style={styles.readOnlyBadge}>
-                  <Text style={styles.readOnlyBadgeText}>Supabase</Text>
+              <Text style={[styles.fieldLabel, { color: palette.labelText }]}>Email</Text>
+              <View style={[styles.readOnlyField, {
+                backgroundColor: palette.readOnlyBg,
+                borderColor:     palette.cardBorder,
+              }]}>
+                <Text style={[styles.readOnlyText, { color: palette.subtitleText }]}>
+                  {profile.email}
+                </Text>
+                <View style={[styles.readOnlyBadge, { backgroundColor: palette.readOnlyBadge }]}>
+                  <Text style={[styles.readOnlyBadgeText, { color: palette.subtitleText }]}>
+                    Supabase
+                  </Text>
                 </View>
               </View>
             </View>
@@ -202,11 +248,17 @@ export default function ConfiguracoesScreen(_props: ConfiguracoesScreenProps): R
 
           {/* Nome */}
           <View style={styles.fieldContainer}>
-            <Text style={styles.fieldLabel}>Nome de exibição</Text>
+            <Text style={[styles.fieldLabel, { color: palette.labelText }]}>
+              Nome de exibição
+            </Text>
             <TextInput
-              style={styles.textInput}
+              style={[styles.textInput, {
+                backgroundColor: palette.inputBg,
+                borderColor:     palette.inputBorder,
+                color:           palette.inputText,
+              }]}
               placeholder="Como você quer ser chamado?"
-              placeholderTextColor="#9ca3af"
+              placeholderTextColor={palette.hintText}
               value={editName}
               onChangeText={setEditName}
               autoCapitalize="words"
@@ -214,111 +266,295 @@ export default function ConfiguracoesScreen(_props: ConfiguracoesScreenProps): R
               returnKeyType="next"
               maxLength={50}
             />
-            <Text style={styles.fieldHint}>
+            <Text style={[styles.fieldHint, { color: palette.hintText }]}>
               Exibido na saudação do Dashboard
             </Text>
           </View>
 
           {/* Renda mensal */}
           <View style={styles.fieldContainer}>
-            <Text style={styles.fieldLabel}>Renda mensal (R$)</Text>
+            <Text style={[styles.fieldLabel, { color: palette.labelText }]}>
+              Renda mensal (R$)
+            </Text>
             <TextInput
-              style={styles.textInput}
+              style={[styles.textInput, {
+                backgroundColor: palette.inputBg,
+                borderColor:     palette.inputBorder,
+                color:           palette.inputText,
+              }]}
               placeholder="Ex: 5000"
-              placeholderTextColor="#9ca3af"
+              placeholderTextColor={palette.hintText}
               value={editIncome}
-              onChangeText={(text) => {
-                const filtered = text.replace(/[^0-9.,]/g, '');
-                setEditIncome(filtered);
-              }}
+              onChangeText={(text) =>
+                setEditIncome(text.replace(/[^0-9.,]/g, ''))
+              }
               keyboardType="decimal-pad"
               returnKeyType="next"
             />
-            <Text style={styles.fieldHint}>
+            <Text style={[styles.fieldHint, { color: palette.hintText }]}>
               Usada pela IA para analisar a viabilidade das suas metas
             </Text>
             {monthlyIncome > 0 && (
-              <View style={styles.currentValueContainer}>
-                <Text style={styles.currentValueLabel}>Valor salvo:</Text>
-                <Text style={styles.currentValueText}>{formatCurrency(monthlyIncome)}</Text>
+              <View style={styles.currentValueRow}>
+                <Text style={[styles.currentValueLabel, { color: palette.hintText }]}>
+                  Valor salvo:
+                </Text>
+                <Text style={[styles.currentValueAmount, { color: SEMANTIC.savings.text }]}>
+                  {formatCurrency(monthlyIncome)}
+                </Text>
               </View>
             )}
           </View>
         </View>
 
-        {/* ══════════════════════════════════════════════════════════════ */}
-        {/* SEÇÃO 2: INTEGRAÇÃO COM IA */}
-        {/* ══════════════════════════════════════════════════════════════ */}
-        <View style={styles.sectionCard}>
+        {/* ══════════════════════════════════════════════════════════
+            SEÇÃO 2: INTEGRAÇÃO COM IA
+        ══════════════════════════════════════════════════════════ */}
+        <View style={[styles.sectionCard, {
+          backgroundColor: palette.cardBg,
+          borderColor:     palette.cardBorder,
+        }]}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionEmoji}>🤖</Text>
-            <Text style={styles.sectionTitle}>Integração com IA</Text>
+            <Text style={[styles.sectionTitle, { color: palette.sectionTitle }]}>
+              Integração com IA
+            </Text>
           </View>
 
-          <View style={styles.aiInfoBanner}>
+          {/* Banner informativo */}
+          <View style={[styles.aiInfoBanner, {
+            backgroundColor: isDark ? '#2e1065' : SEMANTIC.purple.bg,
+            borderColor:     isDark ? '#7c3aed' : SEMANTIC.purple.border,
+          }]}>
             <Text style={styles.aiInfoEmoji}>ℹ️</Text>
-            <Text style={styles.aiInfoText}>
+            <Text style={[styles.aiInfoText, {
+              color: isDark ? '#c4b5fd' : SEMANTIC.purple.text,
+            }]}>
               A análise de viabilidade das metas utiliza a API do Groq (LLaMA 3.3 70B).
               Sua chave é armazenada apenas localmente no dispositivo e enviada
               diretamente para os servidores do Groq.
             </Text>
           </View>
 
-          {/* Chave da API do Groq */}
+          {/* Campo da chave */}
           <View style={styles.fieldContainer}>
-            <Text style={styles.fieldLabel}>Chave da API do Groq</Text>
-            <View style={styles.apiKeyInputRow}>
+            <Text style={[styles.fieldLabel, { color: palette.labelText }]}>
+              Chave da API do Groq
+            </Text>
+            <View style={styles.apiKeyRow}>
               <TextInput
-                style={[styles.textInput, styles.apiKeyInput]}
+                style={[styles.textInput, styles.apiKeyInput, {
+                  backgroundColor: palette.inputBg,
+                  borderColor:     palette.inputBorder,
+                  color:           palette.inputText,
+                }]}
                 placeholder="gsk_..."
-                placeholderTextColor="#9ca3af"
-                value={showApiKey ? editApiKey : (editApiKey.length > 0 ? maskApiKey(editApiKey) : '')}
+                placeholderTextColor={palette.hintText}
+                value={
+                  showApiKey
+                    ? editApiKey
+                    : editApiKey.length > 0
+                    ? maskApiKey(editApiKey)
+                    : ''
+                }
                 onChangeText={setEditApiKey}
                 autoCapitalize="none"
                 autoCorrect={false}
                 autoComplete="off"
-                secureTextEntry={false}
                 returnKeyType="done"
                 editable={showApiKey || editApiKey.length === 0}
               />
               <TouchableOpacity
                 onPress={() => setShowApiKey((prev) => !prev)}
                 activeOpacity={0.7}
-                style={styles.toggleApiKeyButton}
+                style={[styles.toggleBtn, {
+                  backgroundColor: palette.toggleBtnBg,
+                  borderColor:     palette.cardBorder,
+                }]}
               >
-                <Text style={styles.toggleApiKeyText}>
+                <Text style={[styles.toggleBtnText, { color: palette.subtitleText }]}>
                   {showApiKey ? 'Ocultar' : 'Mostrar'}
                 </Text>
               </TouchableOpacity>
             </View>
-            <Text style={styles.fieldHint}>
+            <Text style={[styles.fieldHint, { color: palette.hintText }]}>
               Obtenha sua chave em console.groq.com → API Keys
             </Text>
 
             {/* Status da chave */}
             {groqApiKey.length > 0 ? (
-              <View style={styles.apiKeyStatusActive}>
-                <Text style={styles.apiKeyStatusEmoji}>✓</Text>
-                <Text style={styles.apiKeyStatusText}>Chave configurada</Text>
+              <View style={styles.keyStatusActive}>
+                <Text style={styles.keyStatusEmoji}>✓</Text>
+                <Text style={styles.keyStatusTextActive}>Chave configurada</Text>
               </View>
             ) : (
-              <View style={styles.apiKeyStatusInactive}>
-                <Text style={styles.apiKeyStatusEmoji}>✗</Text>
-                <Text style={styles.apiKeyStatusTextInactive}>Chave não configurada</Text>
+              <View style={styles.keyStatusInactive}>
+                <Text style={styles.keyStatusEmoji}>✗</Text>
+                <Text style={styles.keyStatusTextInactive}>Chave não configurada</Text>
               </View>
             )}
           </View>
         </View>
 
-        {/* ══════════════════════════════════════════════════════════════ */}
-        {/* BOTÃO SALVAR */}
-        {/* ══════════════════════════════════════════════════════════════ */}
+        {/* ══════════════════════════════════════════════════════════
+            SEÇÃO 3: APARÊNCIA   ← NOVA EM FASE 7
+        ══════════════════════════════════════════════════════════ */}
+        <View style={[styles.sectionCard, {
+          backgroundColor: palette.cardBg,
+          borderColor:     palette.cardBorder,
+        }]}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionEmoji}>🎨</Text>
+            <Text style={[styles.sectionTitle, { color: palette.sectionTitle }]}>
+              Aparência
+            </Text>
+          </View>
+
+          {/* ── Seletor de tema ─────────────────────────────────── */}
+          <View style={styles.fieldContainer}>
+            <Text style={[styles.fieldLabel, { color: palette.labelText }]}>Tema</Text>
+
+            <View style={styles.themeRow}>
+              {THEME_OPTIONS.map((option) => {
+                const isSelected = theme === option.value;
+                return (
+                  <TouchableOpacity
+                    key={option.value}
+                    onPress={() => setTheme(option.value)}
+                    activeOpacity={0.75}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: isSelected }}
+                    accessibilityLabel={`Tema ${option.label}`}
+                    style={[
+                      styles.themeBtn,
+                      {
+                        /*
+                         * Selecionado: tint leve do accentColor como background
+                         * + borda sólida do accentColor.
+                         * Não selecionado: fundo neutro + borda sutil.
+                         */
+                        backgroundColor: isSelected
+                          ? hexAlpha(accentColor, 0.10)
+                          : palette.inputBg,
+                        borderColor: isSelected ? accentColor : palette.cardBorder,
+                        borderWidth: isSelected ? 2 : 1.5,
+                      },
+                    ]}
+                  >
+                    <Text style={styles.themeBtnEmoji}>{option.emoji}</Text>
+                    <Text
+                      style={[
+                        styles.themeBtnLabel,
+                        {
+                          color:      isSelected ? accentColor : palette.subtitleText,
+                          fontWeight: isSelected ? '700' : '500',
+                        },
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Hint dinâmico baseado na seleção atual */}
+            <Text style={[styles.fieldHint, { color: palette.hintText }]}>
+              {theme === 'system'
+                ? 'Seguindo as configurações do dispositivo'
+                : theme === 'dark'
+                ? 'Tema escuro ativado — bom para ambientes com pouca luz'
+                : 'Tema claro ativado'}
+            </Text>
+          </View>
+
+          {/* ── Seletor de cor de destaque ──────────────────────── */}
+          <View style={[styles.fieldContainer, styles.lastField]}>
+            <Text style={[styles.fieldLabel, { color: palette.labelText }]}>
+              Cor de destaque
+            </Text>
+
+            <View style={styles.accentRow}>
+              {ACCENT_PRESETS.map((preset) => {
+                const isSelected = storedAccent === preset.color;
+
+                return (
+                  <TouchableOpacity
+                    key={preset.id}
+                    onPress={() => setAccentColor(preset.color)}
+                    activeOpacity={0.75}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: isSelected }}
+                    accessibilityLabel={`Cor ${preset.label}`}
+                    style={styles.accentItem}
+                  >
+                    {/*
+                     * Anel externo: visível apenas quando selecionado.
+                     * Usa a própria cor do preset como borda, criando um halo
+                     * que indica claramente qual cor está ativa.
+                     */}
+                    <View
+                      style={[
+                        styles.accentRing,
+                        {
+                          borderColor: isSelected ? preset.color : 'transparent',
+                          backgroundColor: isSelected
+                            ? hexAlpha(preset.color, 0.10)
+                            : 'transparent',
+                        },
+                      ]}
+                    >
+                      {/* Círculo de cor interno */}
+                      <View
+                        style={[
+                          styles.accentCircle,
+                          { backgroundColor: preset.color },
+                        ]}
+                      >
+                        {isSelected && (
+                          <Text style={styles.accentCheck}>✓</Text>
+                        )}
+                      </View>
+                    </View>
+
+                    {/* Label abaixo do círculo */}
+                    <Text
+                      style={[
+                        styles.accentLabel,
+                        {
+                          color:      isSelected ? preset.color : palette.hintText,
+                          fontWeight: isSelected ? '700' : '400',
+                        },
+                      ]}
+                    >
+                      {preset.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <Text style={[styles.fieldHint, { color: palette.hintText }]}>
+              Aplicada na navegação ativa, ícones de destaque e seleções de UI.
+              As cores financeiras (verde, vermelho, azul) permanecem inalteradas.
+            </Text>
+          </View>
+        </View>
+
+        {/* ══════════════════════════════════════════════════════════
+            BOTÃO SALVAR (Perfil + API Key)
+            Tema e accentColor salvam automaticamente — não precisam deste botão.
+        ══════════════════════════════════════════════════════════ */}
         <TouchableOpacity
           onPress={handleSave}
           activeOpacity={0.85}
           style={[
             styles.saveButton,
-            !hasChanges && styles.saveButtonDisabled,
+            {
+              backgroundColor: hasChanges ? '#0f2044' : (isDark ? '#334155' : '#93a8c9'),
+              shadowOpacity:   hasChanges ? 0.25 : 0,
+              elevation:       hasChanges ? 6 : 0,
+            },
           ]}
         >
           <Text style={styles.saveButtonText}>
@@ -326,25 +562,30 @@ export default function ConfiguracoesScreen(_props: ConfiguracoesScreenProps): R
           </Text>
         </TouchableOpacity>
 
-        {/* ══════════════════════════════════════════════════════════════ */}
-        {/* SEÇÃO 3: CONTA */}
-        {/* ══════════════════════════════════════════════════════════════ */}
-        <View style={styles.sectionCard}>
+        {/* ══════════════════════════════════════════════════════════
+            SEÇÃO 4: CONTA
+        ══════════════════════════════════════════════════════════ */}
+        <View style={[styles.sectionCard, {
+          backgroundColor: palette.cardBg,
+          borderColor:     palette.cardBorder,
+        }]}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionEmoji}>🔐</Text>
-            <Text style={styles.sectionTitle}>Conta</Text>
+            <Text style={[styles.sectionTitle, { color: palette.sectionTitle }]}>
+              Conta
+            </Text>
           </View>
 
           {/* Resetar configurações */}
           <TouchableOpacity
             onPress={handleReset}
             activeOpacity={0.75}
-            style={styles.dangerButton}
+            style={styles.dangerBtn}
           >
-            <Text style={styles.dangerButtonEmoji}>🗑️</Text>
-            <View style={styles.dangerButtonContent}>
-              <Text style={styles.dangerButtonTitle}>Resetar configurações</Text>
-              <Text style={styles.dangerButtonSubtext}>
+            <Text style={styles.dangerBtnEmoji}>🗑️</Text>
+            <View style={styles.dangerBtnContent}>
+              <Text style={styles.dangerBtnTitle}>Resetar configurações</Text>
+              <Text style={[styles.dangerBtnSub, { color: palette.hintText }]}>
                 Limpa nome, renda e chave da API
               </Text>
             </View>
@@ -354,20 +595,25 @@ export default function ConfiguracoesScreen(_props: ConfiguracoesScreenProps): R
           <TouchableOpacity
             onPress={handleLogout}
             activeOpacity={0.75}
-            style={styles.logoutButton}
+            style={[styles.logoutBtn, {
+              backgroundColor: palette.logoutBg,
+              borderColor:     palette.cardBorder,
+            }]}
           >
-            <Text style={styles.logoutButtonEmoji}>🚪</Text>
-            <View style={styles.logoutButtonContent}>
-              <Text style={styles.logoutButtonTitle}>Sair da conta</Text>
-              <Text style={styles.logoutButtonSubtext}>
+            <Text style={styles.logoutBtnEmoji}>🚪</Text>
+            <View style={styles.logoutBtnContent}>
+              <Text style={[styles.logoutBtnTitle, { color: palette.inputText }]}>
+                Sair da conta
+              </Text>
+              <Text style={[styles.logoutBtnSub, { color: palette.hintText }]}>
                 Desconectar do Supabase
               </Text>
             </View>
           </TouchableOpacity>
         </View>
 
-        {/* ── Rodapé ─────────────────────────────────────────────────── */}
-        <Text style={styles.footerText}>
+        {/* ── Rodapé ─────────────────────────────────────────────── */}
+        <Text style={[styles.footerText, { color: palette.footerText }]}>
           FinançasPRO v1.0.0{'\n'}
           Dados armazenados localmente com segurança
         </Text>
@@ -379,11 +625,14 @@ export default function ConfiguracoesScreen(_props: ConfiguracoesScreenProps): R
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
+//
+// Propriedades dinâmicas (cores que variam com isDark ou accentColor) são
+// aplicadas como inline style props dentro do JSX.
+// Aqui ficam apenas as propriedades estáticas de layout e dimensões.
 
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#f9fafb',
   },
   scrollView: {
     flex: 1,
@@ -396,7 +645,7 @@ const styles = StyleSheet.create({
     height: 40,
   },
 
-  // ── Cabeçalho ───────────────────────────────────────────────────────────
+  // ── Cabeçalho ──────────────────────────────────────────────────────────
   screenHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -406,19 +655,16 @@ const styles = StyleSheet.create({
   screenTitle: {
     fontSize: 22,
     fontWeight: '700',
-    color: COLORS.navy,
     letterSpacing: -0.3,
   },
   screenSubtitle: {
     fontSize: 13,
-    color: '#6b7280',
     marginTop: 2,
   },
   headerBadge: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#f3f4f6',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -426,11 +672,11 @@ const styles = StyleSheet.create({
     fontSize: 22,
   },
 
-  // ── Banner de salvo ─────────────────────────────────────────────────────
+  // ── Banner de sucesso ───────────────────────────────────────────────────
   savedBanner: {
-    backgroundColor: COLORS.income.bg,
+    backgroundColor: SEMANTIC.income.bg,
     borderWidth: 1.5,
-    borderColor: COLORS.income.border,
+    borderColor: SEMANTIC.income.border,
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
@@ -440,15 +686,13 @@ const styles = StyleSheet.create({
   savedBannerText: {
     fontSize: 14,
     fontWeight: '700',
-    color: COLORS.income.text,
+    color: SEMANTIC.income.text,
   },
 
-  // ── Seção card ──────────────────────────────────────────────────────────
+  // ── Card de seção ───────────────────────────────────────────────────────
   sectionCard: {
-    backgroundColor: '#ffffff',
     borderRadius: 16,
     borderWidth: 1.5,
-    borderColor: '#e5e7eb',
     padding: 18,
     marginBottom: 16,
     shadowColor: '#000',
@@ -469,34 +713,32 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: COLORS.navy,
   },
 
-  // ── Campos ──────────────────────────────────────────────────────────────
+  // ── Campos genéricos ────────────────────────────────────────────────────
   fieldContainer: {
     marginBottom: 16,
+  },
+  lastField: {
+    marginBottom: 0,
   },
   fieldLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#374151',
     marginBottom: 7,
   },
   fieldHint: {
     fontSize: 11,
-    color: '#9ca3af',
     marginTop: 5,
     fontStyle: 'italic',
+    lineHeight: 16,
   },
   textInput: {
     borderWidth: 1.5,
-    borderColor: '#e5e7eb',
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 13,
     fontSize: 15,
-    color: '#1f2937',
-    backgroundColor: '#f9fafb',
   },
 
   // ── Campo somente leitura ───────────────────────────────────────────────
@@ -504,19 +746,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1.5,
-    borderColor: '#e5e7eb',
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 13,
-    backgroundColor: '#f3f4f6',
   },
   readOnlyText: {
     flex: 1,
     fontSize: 15,
-    color: '#6b7280',
   },
   readOnlyBadge: {
-    backgroundColor: '#e5e7eb',
     borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 3,
@@ -524,12 +762,11 @@ const styles = StyleSheet.create({
   readOnlyBadgeText: {
     fontSize: 10,
     fontWeight: '700',
-    color: '#6b7280',
     letterSpacing: 0.3,
   },
 
-  // ── Valor atual salvo ───────────────────────────────────────────────────
-  currentValueContainer: {
+  // ── Valor atual salvo ────────────────────────────────────────────────────
+  currentValueRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -537,16 +774,14 @@ const styles = StyleSheet.create({
   },
   currentValueLabel: {
     fontSize: 11,
-    color: '#9ca3af',
   },
-  currentValueText: {
+  currentValueAmount: {
     fontSize: 12,
     fontWeight: '700',
-    color: COLORS.savings.text,
   },
 
-  // ── API key input row ───────────────────────────────────────────────────
-  apiKeyInputRow: {
+  // ── API key ─────────────────────────────────────────────────────────────
+  apiKeyRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
@@ -554,65 +789,56 @@ const styles = StyleSheet.create({
   apiKeyInput: {
     flex: 1,
   },
-  toggleApiKeyButton: {
+  toggleBtn: {
     paddingHorizontal: 14,
     paddingVertical: 14,
     borderRadius: 12,
-    backgroundColor: '#f3f4f6',
     borderWidth: 1.5,
-    borderColor: '#e5e7eb',
   },
-  toggleApiKeyText: {
+  toggleBtnText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#6b7280',
   },
-
-  // ── Status da API key ───────────────────────────────────────────────────
-  apiKeyStatusActive: {
+  keyStatusActive: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     marginTop: 8,
-    backgroundColor: COLORS.income.bg,
+    backgroundColor: SEMANTIC.income.bg,
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 6,
     alignSelf: 'flex-start',
   },
-  apiKeyStatusInactive: {
+  keyStatusInactive: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     marginTop: 8,
-    backgroundColor: COLORS.expense.bg,
+    backgroundColor: SEMANTIC.expense.bg,
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 6,
     alignSelf: 'flex-start',
   },
-  apiKeyStatusEmoji: {
+  keyStatusEmoji: {
     fontSize: 12,
     fontWeight: '700',
   },
-  apiKeyStatusText: {
+  keyStatusTextActive: {
     fontSize: 11,
     fontWeight: '700',
-    color: COLORS.income.text,
+    color: SEMANTIC.income.text,
   },
-  apiKeyStatusTextInactive: {
+  keyStatusTextInactive: {
     fontSize: 11,
     fontWeight: '700',
-    color: COLORS.expense.text,
+    color: SEMANTIC.expense.text,
   },
-
-  // ── Banner de info IA ───────────────────────────────────────────────────
   aiInfoBanner: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: COLORS.purple.bg,
     borderWidth: 1,
-    borderColor: COLORS.purple.border,
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -626,28 +852,83 @@ const styles = StyleSheet.create({
   aiInfoText: {
     flex: 1,
     fontSize: 11,
-    color: COLORS.purple.text,
     lineHeight: 17,
   },
 
-  // ── Botão salvar ────────────────────────────────────────────────────────
+  // ── Seletor de tema ─────────────────────────────────────────────────────
+  themeRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  themeBtn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 12,
+    gap: 6,
+    // borderColor e backgroundColor aplicados inline
+  },
+  themeBtnEmoji: {
+    fontSize: 22,
+  },
+  themeBtnLabel: {
+    fontSize: 12,
+    // color e fontWeight aplicados inline
+  },
+
+  // ── Seletor de cor de destaque ──────────────────────────────────────────
+  accentRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
+    marginBottom: 4,
+    flexWrap: 'nowrap',
+    justifyContent: 'flex-start',
+  },
+  accentItem: {
+    alignItems: 'center',
+    gap: 6,
+  },
+  accentRing: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    borderWidth: 2.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    // borderColor e backgroundColor aplicados inline
+  },
+  accentCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    // backgroundColor aplicado inline
+  },
+  accentCheck: {
+    color: '#ffffff',
+    fontSize: 17,
+    fontWeight: '800',
+  },
+  accentLabel: {
+    fontSize: 10,
+    letterSpacing: 0.2,
+    // color e fontWeight aplicados inline
+  },
+
+  // ── Botão Salvar ────────────────────────────────────────────────────────
   saveButton: {
-    backgroundColor: COLORS.navy,
     borderRadius: 14,
     paddingVertical: 16,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
-    shadowColor: COLORS.navy,
+    shadowColor: '#0f2044',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
     shadowRadius: 8,
-    elevation: 6,
-  },
-  saveButtonDisabled: {
-    backgroundColor: '#93a8c9',
-    shadowOpacity: 0,
-    elevation: 0,
+    // backgroundColor, shadowOpacity e elevation aplicados inline
   },
   saveButtonText: {
     color: '#ffffff',
@@ -656,69 +937,61 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
 
-  // ── Botões de perigo ────────────────────────────────────────────────────
-  dangerButton: {
+  // ── Botões de conta ─────────────────────────────────────────────────────
+  dangerBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fef2f2',
+    backgroundColor: SEMANTIC.expense.bg,
     borderWidth: 1.5,
-    borderColor: '#fecaca',
+    borderColor: SEMANTIC.expense.border,
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 14,
     gap: 12,
     marginBottom: 10,
   },
-  dangerButtonEmoji: {
+  dangerBtnEmoji: {
     fontSize: 18,
   },
-  dangerButtonContent: {
+  dangerBtnContent: {
     flex: 1,
   },
-  dangerButtonTitle: {
+  dangerBtnTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: COLORS.expense.text,
+    color: SEMANTIC.expense.text,
     marginBottom: 2,
   },
-  dangerButtonSubtext: {
+  dangerBtnSub: {
     fontSize: 11,
-    color: '#9ca3af',
   },
-
-  // ── Botão de logout ─────────────────────────────────────────────────────
-  logoutButton: {
+  logoutBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f9fafb',
     borderWidth: 1.5,
-    borderColor: '#e5e7eb',
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 14,
     gap: 12,
   },
-  logoutButtonEmoji: {
+  logoutBtnEmoji: {
     fontSize: 18,
   },
-  logoutButtonContent: {
+  logoutBtnContent: {
     flex: 1,
   },
-  logoutButtonTitle: {
+  logoutBtnTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#374151',
     marginBottom: 2,
   },
-  logoutButtonSubtext: {
+  logoutBtnSub: {
     fontSize: 11,
-    color: '#9ca3af',
   },
 
-  // ── Rodapé ──────────────────────────────────────────────────────────────
+  // ── Rodapé ─────────────────────────────────────────────────────────────
   footerText: {
     fontSize: 11,
-    color: '#d1d5db',
     textAlign: 'center',
     lineHeight: 17,
     marginTop: 8,
