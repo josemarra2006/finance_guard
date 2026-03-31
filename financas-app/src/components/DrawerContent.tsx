@@ -4,7 +4,6 @@ import {
   View,
   Text,
   TouchableOpacity,
-  ScrollView,
   StyleSheet,
 } from 'react-native';
 import {
@@ -12,74 +11,71 @@ import {
   type DrawerContentComponentProps,
 } from '@react-navigation/drawer';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Feather } from '@expo/vector-icons';
 
 import { useAppTheme, hexAlpha } from '../contexts/ThemeContext';
 
-// ─── Route icon map ───────────────────────────────────────────────────────────
+// ─── Mapa de ícones por rota ──────────────────────────────────────────────────
 
-const ROUTE_ICONS: Record<string, string> = {
-  Dashboard:     '📊',
-  'Relatórios':  '📈',
-  Metas:         '🎯',
-  'Chat IA':     '🤖',
-  Configurações: '⚙️',
+type FeatherIconName = keyof typeof Feather.glyphMap;
+
+const ROUTE_ICONS: Record<string, FeatherIconName> = {
+  Dashboard:     'bar-chart-2',
+  'Relatórios':  'trending-up',
+  Metas:         'target',
+  'Chat IA':     'cpu',
+  Configurações: 'settings',
 };
 
-// ─── Component ────────────────────────────────────────────────────────────────
+// ─── Componente ──────────────────────────────────────────────────────────────
 
-/**
- * DrawerContent
- *
- * Customizações de Fase 7:
- *  - O círculo do logo usa `accentColor` como fundo (substitui `bg-primary-500`).
- *  - O background do item ativo usa um tint semi-transparente do accentColor.
- *  - O texto do item ativo usa `accentColor`.
- *  - A barra indicadora vertical usa `accentColor`.
- *  - O fundo do painel e do rodapé adaptam-se ao modo escuro via `isDark`.
- *
- * O cabeçalho navy (`#0f2044`) é mantido fixo — é a identidade de marca do app
- * e não deve variar com a accentColor.
- */
 export default function DrawerContent(
   props: DrawerContentComponentProps,
 ): React.JSX.Element {
   const { state, navigation } = props;
   const { accentColor, isDark } = useAppTheme();
 
-  // ── Cores dinâmicas ───────────────────────────────────────────────────────
-  const panelBg      = isDark ? '#0f172a' : '#ffffff';
-  const inactiveText = isDark ? '#94a3b8' : '#4b5563';
-  const footerBg     = isDark ? '#0f172a' : '#ffffff';
-  const footerBorder = isDark ? '#1e293b' : '#f3f4f6';
-  const footerText   = isDark ? '#475569' : '#9ca3af';
+  const P = {
+    panelBg:       isDark ? '#0d1117' : '#ffffff',
+    inactiveText:  isDark ? '#8b949e' : '#57606a',
+    inactiveIcon:  isDark ? '#6e7681' : '#9198a1',
+    footerBorder:  isDark ? '#21262d' : '#eaecef',
+    footerText:    isDark ? '#6e7681' : '#9198a1',
+    headerTagline: isDark ? '#8b949e' : '#8898aa',
+    logoBorder:    isDark ? hexAlpha(accentColor, 0.4) : hexAlpha(accentColor, 0.3),
+    logoBg:        isDark ? hexAlpha(accentColor, 0.12) : hexAlpha(accentColor, 0.08),
+    divider:       isDark ? '#21262d' : '#eaecef',
+  };
 
   return (
     <DrawerContentScrollView
       {...props}
       contentContainerStyle={{ flex: 1, paddingTop: 0 }}
     >
-      {/* ── Cabeçalho de marca ───────────────────────────────────────── */}
-      {/*
-       * O header usa navy fixo (#0f2044) independentemente do accentColor.
-       * Apenas o círculo do logo usa accentColor para criar uma relação visual
-       * entre a cor escolhida pelo usuário e a identidade do app.
-       */}
+      {/* ── Cabeçalho de marca ──────────────────────────────────── */}
       <View style={styles.drawerHeader}>
-        <View style={[styles.logoCircle, { backgroundColor: accentColor }]}>
-          <Text style={styles.logoEmoji}>💰</Text>
+        <View
+          style={[
+            styles.logoCircle,
+            { backgroundColor: P.logoBg, borderColor: P.logoBorder },
+          ]}
+        >
+          <Feather name="dollar-sign" size={24} color={accentColor} />
         </View>
         <Text style={styles.appName}>FinançasPRO</Text>
-        <Text style={styles.appTagline}>Controle seu futuro</Text>
+        <Text style={[styles.appTagline, { color: P.headerTagline }]}>
+          Controle seu futuro
+        </Text>
       </View>
 
-      {/* ── Itens de navegação ───────────────────────────────────────── */}
-      <ScrollView
-        style={[styles.navList, { backgroundColor: panelBg }]}
-        showsVerticalScrollIndicator={false}
-      >
+      {/* Divisor */}
+      <View style={[styles.divider, { backgroundColor: P.divider }]} />
+
+      {/* ── Itens de navegação ───────────────────────────────────── */}
+      <View style={[styles.navList, { backgroundColor: P.panelBg }]}>
         {state.routes.map((route, index) => {
           const isFocused = state.index === index;
-          const icon = ROUTE_ICONS[route.name] ?? '📄';
+          const iconName: FeatherIconName = ROUTE_ICONS[route.name] ?? 'circle';
 
           return (
             <TouchableOpacity
@@ -89,57 +85,54 @@ export default function DrawerContent(
               style={[
                 styles.navItem,
                 {
-                  /*
-                   * Tint de 10% do accentColor como background ativo.
-                   * hexAlpha('#2f78f0', 0.10) → '#2f78f01a'
-                   * A baixa opacidade garante legibilidade mesmo com accent
-                   * colors vibrantes como laranja ou verde.
-                   */
                   backgroundColor: isFocused
-                    ? hexAlpha(accentColor, 0.10)
+                    ? hexAlpha(accentColor, 0.08)
                     : 'transparent',
                 },
               ]}
               accessibilityRole="button"
               accessibilityState={{ selected: isFocused }}
             >
-              <Text style={styles.navIcon}>{icon}</Text>
+              {/* Barra indicadora lateral */}
+              <View
+                style={[
+                  styles.activeBar,
+                  { backgroundColor: isFocused ? accentColor : 'transparent' },
+                ]}
+              />
+
+              <Feather
+                name={iconName}
+                size={17}
+                color={isFocused ? accentColor : P.inactiveIcon}
+                style={styles.navIconSpacing}
+              />
 
               <Text
                 style={[
                   styles.navLabel,
                   {
-                    color: isFocused ? accentColor : inactiveText,
-                    fontWeight: isFocused ? '700' : '500',
+                    color: isFocused ? accentColor : P.inactiveText,
+                    fontWeight: isFocused ? '600' : '400',
                   },
                 ]}
               >
                 {route.name}
               </Text>
-
-              {/* Barra vertical indicadora de item ativo */}
-              {isFocused && (
-                <View
-                  style={[
-                    styles.activeIndicator,
-                    { backgroundColor: accentColor },
-                  ]}
-                />
-              )}
             </TouchableOpacity>
           );
         })}
-      </ScrollView>
+      </View>
 
-      {/* ── Rodapé ──────────────────────────────────────────────────── */}
+      {/* ── Rodapé ──────────────────────────────────────────────── */}
       <SafeAreaView
         edges={['bottom']}
         style={[
           styles.footer,
-          { backgroundColor: footerBg, borderTopColor: footerBorder },
+          { backgroundColor: P.panelBg, borderTopColor: P.footerBorder },
         ]}
       >
-        <Text style={[styles.footerVersion, { color: footerText }]}>
+        <Text style={[styles.footerVersion, { color: P.footerText }]}>
           FinançasPRO v1.0.0
         </Text>
       </SafeAreaView>
@@ -150,78 +143,70 @@ export default function DrawerContent(
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  // ── Cabeçalho ──────────────────────────────────────────────────────────
   drawerHeader: {
-    backgroundColor: '#0f2044',   // navy fixo — identidade de marca
-    paddingHorizontal: 24,
-    paddingVertical: 32,
+    backgroundColor: '#0f2044',
+    paddingHorizontal: 20,
+    paddingTop: 28,
+    paddingBottom: 24,
   },
   logoCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 52,
+    height: 52,
+    borderRadius: 12,
+    borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
-    // backgroundColor definido inline via accentColor
-  },
-  logoEmoji: {
-    fontSize: 28,
+    marginBottom: 14,
   },
   appName: {
     color: '#ffffff',
-    fontSize: 20,
+    fontSize: 17,
     fontWeight: '700',
     letterSpacing: -0.3,
+    marginBottom: 2,
   },
   appTagline: {
-    color: '#bfdbfe',   // primary-200 — contraste suave sobre navy
-    fontSize: 13,
-    marginTop: 2,
+    fontSize: 12,
+    fontWeight: '400',
   },
-
-  // ── Lista de navegação ─────────────────────────────────────────────────
+  divider: {
+    height: 1,
+  },
   navList: {
     flex: 1,
-    paddingTop: 8,
-    // backgroundColor definido inline via isDark
+    paddingVertical: 8,
   },
   navItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    marginHorizontal: 10,
-    marginVertical: 2,
-    borderRadius: 12,
-    // backgroundColor definido inline via isFocused + accentColor
+    height: 48,
+    marginHorizontal: 8,
+    marginVertical: 1,
+    borderRadius: 8,
+    paddingRight: 16,
+    overflow: 'hidden',
   },
-  navIcon: {
-    fontSize: 20,
-    marginRight: 14,
+  activeBar: {
+    width: 3,
+    height: 22,
+    borderRadius: 2,
+    marginRight: 12,
+    marginLeft: 4,
+  },
+  navIconSpacing: {
+    marginRight: 12,
   },
   navLabel: {
-    flex: 1,
-    fontSize: 15,
-    // color e fontWeight definidos inline
+    fontSize: 14,
+    letterSpacing: 0.1,
   },
-  activeIndicator: {
-    width: 5,
-    height: 22,
-    borderRadius: 3,
-    // backgroundColor definido inline via accentColor
-  },
-
-  // ── Rodapé ────────────────────────────────────────────────────────────
   footer: {
-    paddingHorizontal: 24,
-    paddingVertical: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
     borderTopWidth: 1,
-    // backgroundColor e borderTopColor definidos inline via isDark
   },
   footerVersion: {
     fontSize: 11,
     textAlign: 'center',
-    // color definido inline via isDark
   },
 });

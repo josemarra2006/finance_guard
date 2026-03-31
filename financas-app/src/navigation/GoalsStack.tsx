@@ -8,22 +8,9 @@ import GoalDetailsScreen from '../screens/goals/GoalDetailsScreen';
 
 const Stack = createNativeStackNavigator<GoalsStackParamList>();
 
-// Cor do cabeçalho — mantém identidade visual do app
-const HEADER_BG = '#0f2044';
+const HEADER_BG   = '#0f2044';
 const HEADER_TINT = '#ffffff';
 
-/**
- * Stack Navigator interno da aba "Metas".
- *
- * Este navigator é renderizado dentro de `MetasScreen`,
- * que por sua vez é uma rota do DrawerNavigator principal.
- *
- * Fluxo de navegação:
- *   GoalsMain → GoalDetails (goalId, goalName)
- *
- * O header do Drawer já exibe "Metas" — as telas filhas do Stack
- * configuram seus próprios headers conforme necessário.
- */
 export default function GoalsStack(): React.JSX.Element {
   return (
     <Stack.Navigator
