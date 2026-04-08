@@ -11,18 +11,22 @@ import type {
 // ─── Types adicionais ─────────────────────────────────────────────────────────
 
 /**
- * Resumo financeiro do mês atual calculado diretamente do banco.
+ * Resumo financeiro do MÊS CORRENTE calculado diretamente do banco.
  * Inclui os 4 valores exibidos nos cards do Dashboard.
+ *
+ * IMPORTANTE: todos os valores aqui se referem EXCLUSIVAMENTE ao mês e ano
+ * em que o dispositivo se encontra no momento da consulta. Transações de
+ * meses anteriores ou futuros NÃO são incluídas.
  */
 export interface MonthlySummary {
-  /** Soma de todas as entradas do mês */
+  /** Soma de todas as entradas DO MÊS ATUAL */
   totalIncome: number;
-  /** Soma de todos os gastos do mês */
+  /** Soma de todos os gastos DO MÊS ATUAL */
   totalExpenses: number;
-  /** Soma de todas as economias do mês */
+  /** Soma de todas as economias DO MÊS ATUAL */
   totalSavings: number;
   /**
-   * Sobras = Entradas - Gastos - Economias.
+   * Sobras DO MÊS ATUAL = Entradas - Gastos - Economias.
    *
    * Economias SÃO subtraídas das sobras porque representam dinheiro
    * comprometido intencionalmente pelo usuário com uma meta.
@@ -50,9 +54,15 @@ export interface UpdateTransactionData {
 interface UseTransactionsReturn {
   /** Lista completa de transações, mais recente primeiro */
   transactions: Transaction[];
-  /** Últimas 10 transações do mês atual para o Dashboard */
+  /**
+   * Últimas 10 transações DO MÊS ATUAL para o Dashboard.
+   * Não inclui transações de meses anteriores.
+   */
   monthlyTransactions: Transaction[];
-  /** Resumo financeiro do mês atual (4 cards) */
+  /**
+   * Resumo financeiro DO MÊS ATUAL (4 cards do Dashboard).
+   * Os valores são filtrados rigorosamente pelo mês e ano correntes.
+   */
   monthlySummary: MonthlySummary;
   /** True enquanto a lista completa carrega */
   isLoading: boolean;
@@ -81,12 +91,21 @@ const EMPTY_MONTHLY_SUMMARY: MonthlySummary = {
 // ─── Utilitário de data ───────────────────────────────────────────────────────
 
 /**
- * Retorna "YYYY-MM" para usar em LIKE 'YYYY-MM%' no SQLite.
- * Exemplo: hoje é 15/06/2025 → retorna "2025-06"
+ * Retorna o prefixo "YYYY-MM" do mês corrente do dispositivo,
+ * usado na cláusula LIKE do SQLite para filtrar apenas o mês atual.
+ *
+ * Exemplos:
+ *   Chamado em 15/05/2026 → "2026-05"
+ *   Chamado em 01/12/2025 → "2025-12"
+ *
+ * A filtragem por prefixo ISO é intencional: como todas as datas são
+ * armazenadas no formato ISO 8601 (ex: "2026-05-15T10:30:00.000Z"),
+ * o padrão "YYYY-MM%" casa apenas com registros do mês e ano corretos,
+ * sem risco de vazar transações de outros períodos.
  */
 function getCurrentMonthPrefix(): string {
-  const now = new Date();
-  const year = now.getFullYear();
+  const now   = new Date();
+  const year  = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, '0');
   return `${year}-${month}`;
 }
@@ -96,12 +115,12 @@ function getCurrentMonthPrefix(): string {
 export function useTransactions(): UseTransactionsReturn {
   const db = useSQLiteContext();
 
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [transactions,       setTransactions]       = useState<Transaction[]>([]);
   const [monthlyTransactions, setMonthlyTransactions] = useState<Transaction[]>([]);
-  const [monthlySummary, setMonthlySummary] = useState<MonthlySummary>(EMPTY_MONTHLY_SUMMARY);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isLoadingMonthly, setIsLoadingMonthly] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
+  const [monthlySummary,     setMonthlySummary]     = useState<MonthlySummary>(EMPTY_MONTHLY_SUMMARY);
+  const [isLoading,          setIsLoading]          = useState<boolean>(true);
+  const [isLoadingMonthly,   setIsLoadingMonthly]   = useState<boolean>(true);
+  const [error,              setError]              = useState<string | null>(null);
 
   // ── Lista completa ──────────────────────────────────────────────────────
   const loadTransactions = useCallback(async (): Promise<void> => {
@@ -121,14 +140,33 @@ export function useTransactions(): UseTransactionsReturn {
     }
   }, [db]);
 
-  // ── Dados do mês atual ──────────────────────────────────────────────────
+  // ── Dados do mês CORRENTE ───────────────────────────────────────────────
+  /**
+   * Carrega as transações e os totais financeiros referentes EXCLUSIVAMENTE
+   * ao mês e ano em que o dispositivo se encontra.
+   *
+   * O filtro `date LIKE 'YYYY-MM%'` é gerado em tempo de execução via
+   * `getCurrentMonthPrefix()`, garantindo que a barreira temporal seja
+   * sempre o mês corrente — nunca um intervalo fixo hardcoded.
+   *
+   * Dados carregados:
+   *  1. Últimas 10 transações do mês (para a FlatList do Dashboard)
+   *  2. Totais por tipo do mês (para os 4 cards: Entradas, Gastos, Economias, Sobras)
+   */
   const loadMonthlyData = useCallback(async (): Promise<void> => {
     try {
       setIsLoadingMonthly(true);
       setError(null);
+
+      /*
+       * Prefixo calculado no momento da chamada com a data do dispositivo.
+       * Ex: se hoje é 08/04/2026 → monthPrefix = "2026-04"
+       * A query retornará APENAS registros cujo campo `date` começa com
+       * "2026-04", excluindo qualquer transação de março/2026, maio/2026 etc.
+       */
       const monthPrefix = getCurrentMonthPrefix();
 
-      // Últimas 10 transações do mês para a FlatList
+      // 1. Últimas 10 transações do mês corrente para a FlatList do Dashboard
       const recentRows = await db.getAllAsync<Transaction>(
         `SELECT id, title, amount, type, date
          FROM transactions
@@ -139,7 +177,7 @@ export function useTransactions(): UseTransactionsReturn {
       );
       setMonthlyTransactions(recentRows);
 
-      // Totais agrupados por tipo para os 4 cards
+      // 2. Totais agrupados por tipo — APENAS do mês corrente
       const summaryRows = await db.getAllAsync<{ type: string; total: number }>(
         `SELECT type, SUM(amount) AS total
          FROM transactions
@@ -156,9 +194,11 @@ export function useTransactions(): UseTransactionsReturn {
         totalIncome,
         totalExpenses,
         totalSavings,
-        // Sobras = Entradas - Gastos - Economias
-        // Economias são dinheiro comprometido com metas: não devem aparecer
-        // como dinheiro "livre" nas sobras.
+        /*
+         * Sobras = Entradas - Gastos - Economias (todos do mês corrente).
+         * Economias são dinheiro comprometido com metas: não devem aparecer
+         * como dinheiro "livre" nas sobras.
+         */
         surplus: totalIncome - totalExpenses - totalSavings,
       });
     } catch (e) {
@@ -213,31 +253,15 @@ export function useTransactions(): UseTransactionsReturn {
   const updateTransaction = useCallback(
     async (id: number, data: UpdateTransactionData): Promise<void> => {
       try {
-        // Monta SET dinâmico apenas com os campos fornecidos
         const setClauses: string[] = [];
         const params: (string | number)[] = [];
 
-        if (data.title !== undefined) {
-          setClauses.push('title = ?');
-          params.push(data.title);
-        }
-        if (data.amount !== undefined) {
-          setClauses.push('amount = ?');
-          params.push(data.amount);
-        }
-        if (data.type !== undefined) {
-          setClauses.push('type = ?');
-          params.push(data.type);
-        }
-        if (data.date !== undefined) {
-          setClauses.push('date = ?');
-          params.push(data.date);
-        }
+        if (data.title  !== undefined) { setClauses.push('title = ?');  params.push(data.title);  }
+        if (data.amount !== undefined) { setClauses.push('amount = ?'); params.push(data.amount); }
+        if (data.type   !== undefined) { setClauses.push('type = ?');   params.push(data.type);   }
+        if (data.date   !== undefined) { setClauses.push('date = ?');   params.push(data.date);   }
 
-        if (setClauses.length === 0) {
-          // Nada a atualizar: retorna sem tocar no banco
-          return;
-        }
+        if (setClauses.length === 0) return; // nada a atualizar
 
         params.push(id);
 
@@ -270,7 +294,17 @@ export function useTransactions(): UseTransactionsReturn {
     [db]
   );
 
-  // ── getFinancialSummary (global, todos os meses) ────────────────────────
+  // ── getFinancialSummary ─────────────────────────────────────────────────
+  /**
+   * Resumo financeiro GLOBAL (todos os meses / histórico completo).
+   *
+   * Esta função NÃO é usada pelo Dashboard — ela existe para a aba de Metas,
+   * que precisa do saldo acumulado de todos os períodos para calcular o
+   * progresso de cada meta ao longo do tempo.
+   *
+   * Regra intocável: esta query não deve receber nenhum filtro de data.
+   * As metas devem continuar buscando o valor histórico global.
+   */
   const getFinancialSummary = useCallback(async (): Promise<FinancialSummary> => {
     const rows = await db.getAllAsync<{ type: string; total: number }>(
       `SELECT type, SUM(amount) AS total FROM transactions GROUP BY type`

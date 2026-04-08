@@ -49,21 +49,33 @@ function formatDate(isoDate: string): string {
   return `${p[2]}/${p[1]}/${p[0]}`;
 }
 
+const MONTH_NAMES = [
+  'Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+  'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro',
+];
+
 function getCurrentMonthName(): string {
-  const months = [
-    'Janeiro','Fevereiro','Março','Abril','Maio','Junho',
-    'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro',
-  ];
-  return months[new Date().getMonth()] ?? '';
+  return MONTH_NAMES[new Date().getMonth()] ?? '';
+}
+
+/**
+ * Retorna o rótulo de período exibido acima dos cards do Dashboard.
+ * Formato: "Visão Geral — Maio/2026"
+ *
+ * O separador em-dash (—) é intencional: mantém o tom técnico/profissional
+ * sem usar traços simples que poderiam ser confundidos com sinal negativo.
+ */
+function getCurrentPeriodLabel(): string {
+  const now   = new Date();
+  const month = MONTH_NAMES[now.getMonth()] ?? '';
+  const year  = now.getFullYear();
+  return `Visão Geral — ${month}/${year}`;
 }
 
 // ─── Máscara monetária estilo banco ───────────────────────────────────────────
 //
 // Dígitos são adicionados da direita para a esquerda (igual app de banco).
 // "1" → "R$ 0,01" | "100" → "R$ 1,00" | "12345" → "R$ 123,45"
-//
-// applyMoneyMask: recebe qualquer string, extrai dígitos e formata.
-// parseMoneyMask: extrai o número de uma string formatada.
 
 function applyMoneyMask(input: string): string {
   const digits = input.replace(/\D/g, '');
@@ -133,9 +145,9 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps): R
     : 'Olá';
 
   const [isModalVisible, setIsModalVisible] = useState<boolean>(false);
-  const [form, setForm]       = useState<TransactionForm>(INITIAL_FORM);
-  const [isSaving, setIsSaving] = useState<boolean>(false);
-  const [formError, setFormError] = useState<string | null>(null);
+  const [form,           setForm]           = useState<TransactionForm>(INITIAL_FORM);
+  const [isSaving,       setIsSaving]       = useState<boolean>(false);
+  const [formError,      setFormError]      = useState<string | null>(null);
 
   // ── Paleta dinâmica ───────────────────────────────────────────────────────
   const P = {
@@ -153,6 +165,10 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps): R
     sectionLabel:     isDark ? '#8b949e' : '#57606a',
     badgeBg:          isDark ? '#21262d' : '#f0f6ff',
     badgeBorder:      isDark ? '#30363d' : '#d0d7de',
+    periodBg:         isDark ? '#161b22' : '#ffffff',
+    periodBorder:     isDark ? '#30363d' : '#d0d7de',
+    periodText:       isDark ? '#8b949e' : '#57606a',
+    periodDot:        isDark ? '#30363d' : '#d0d7de',
   };
 
   const SEM = getSemantic(isDark);
@@ -169,12 +185,11 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps): R
 
   const validateForm = useCallback((): boolean => {
     setFormError(null);
-    if (!form.title.trim()) { setFormError('O título é obrigatório.'); return false; }
-    if (form.title.trim().length < 2) { setFormError('Título deve ter pelo menos 2 caracteres.'); return false; }
-    if (!form.amount.trim()) { setFormError('O valor é obrigatório.'); return false; }
-    // ── Usa parseMoneyMask em vez de parseFloat direto ──
+    if (!form.title.trim())                   { setFormError('O título é obrigatório.'); return false; }
+    if (form.title.trim().length < 2)         { setFormError('Título deve ter pelo menos 2 caracteres.'); return false; }
+    if (!form.amount.trim())                  { setFormError('O valor é obrigatório.'); return false; }
     const v = parseMoneyMask(form.amount);
-    if (v <= 0) { setFormError('Informe um valor numérico maior que zero.'); return false; }
+    if (v <= 0)                               { setFormError('Informe um valor numérico maior que zero.'); return false; }
     return true;
   }, [form]);
 
@@ -184,7 +199,7 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps): R
     try {
       await addTransaction({
         title:  form.title.trim(),
-        amount: parseMoneyMask(form.amount),   // ← parseMoneyMask
+        amount: parseMoneyMask(form.amount),
         type:   form.type,
         date:   new Date().toISOString(),
       });
@@ -214,12 +229,12 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps): R
     ({ item, index }: { item: (typeof monthlyTransactions)[0]; index: number }) => {
       const isLast = index === monthlyTransactions.length - 1;
 
-      let dotColor = SEM.income.text;
+      let dotColor    = SEM.income.text;
       let amountColor = SEM.income.text;
-      let signal = '+';
-      let badgeBg = SEM.income.bg;
+      let signal      = '+';
+      let badgeBg     = SEM.income.bg;
       let badgeBorder = SEM.income.border;
-      let label = 'Entrada';
+      let label       = 'Entrada';
 
       if (item.type === 'gasto') {
         dotColor = SEM.expense.text; amountColor = SEM.expense.text;
@@ -285,22 +300,41 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps): R
           </View>
         ) : (
           <>
-            <Text style={[styles.sectionLabel, { color: P.sectionLabel }]}>RESUMO DO MÊS</Text>
+            {/*
+             * Indicador de período: deixa inequívoco para o usuário que os
+             * valores dos cards se referem apenas ao mês corrente.
+             * Design intencialmente discreto — ocupa pouco espaço vertical,
+             * usa tipografia pequena e a mesma paleta de cores dos labels de
+             * seção existentes, sem acrescentar ruído visual à tela.
+             */}
+            <View style={[styles.periodRow, { backgroundColor: P.periodBg, borderColor: P.periodBorder }]}>
+              <Feather name="calendar" size={11} color={P.periodText} style={{ marginRight: 6 }} />
+              <Text style={[styles.periodLabel, { color: P.periodText }]}>
+                {getCurrentPeriodLabel()}
+              </Text>
+            </View>
+
             <View style={styles.cardsGrid}>
               <View style={[styles.card, { backgroundColor: SEM.income.bg, borderColor: SEM.income.border }]}>
                 <View style={styles.cardHeader}>
                   <Feather name="trending-up" size={14} color={SEM.income.text} />
                   <Text style={[styles.cardLabel, { color: SEM.income.text }]}>ENTRADAS</Text>
                 </View>
-                <Text style={[styles.cardValue, { color: SEM.income.text }]}>{formatCurrency(monthlySummary.totalIncome)}</Text>
+                <Text style={[styles.cardValue, { color: SEM.income.text }]}>
+                  {formatCurrency(monthlySummary.totalIncome)}
+                </Text>
               </View>
+
               <View style={[styles.card, { backgroundColor: SEM.expense.bg, borderColor: SEM.expense.border }]}>
                 <View style={styles.cardHeader}>
                   <Feather name="trending-down" size={14} color={SEM.expense.text} />
                   <Text style={[styles.cardLabel, { color: SEM.expense.text }]}>GASTOS</Text>
                 </View>
-                <Text style={[styles.cardValue, { color: SEM.expense.text }]}>{formatCurrency(monthlySummary.totalExpenses)}</Text>
+                <Text style={[styles.cardValue, { color: SEM.expense.text }]}>
+                  {formatCurrency(monthlySummary.totalExpenses)}
+                </Text>
               </View>
+
               <View style={[styles.card, { backgroundColor: SEM.surplus.bg, borderColor: SEM.surplus.border }]}>
                 <View style={styles.cardHeader}>
                   <Feather name="activity" size={14} color={SEM.surplus.text} />
@@ -310,12 +344,15 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps): R
                   {monthlySummary.surplus < 0 ? '−' : ''}{formatCurrency(Math.abs(monthlySummary.surplus))}
                 </Text>
               </View>
+
               <View style={[styles.card, { backgroundColor: SEM.savings.bg, borderColor: SEM.savings.border }]}>
                 <View style={styles.cardHeader}>
                   <Feather name="shield" size={14} color={SEM.savings.text} />
                   <Text style={[styles.cardLabel, { color: SEM.savings.text }]}>ECONOMIAS</Text>
                 </View>
-                <Text style={[styles.cardValue, { color: SEM.savings.text }]}>{formatCurrency(monthlySummary.totalSavings)}</Text>
+                <Text style={[styles.cardValue, { color: SEM.savings.text }]}>
+                  {formatCurrency(monthlySummary.totalSavings)}
+                </Text>
               </View>
             </View>
           </>
@@ -336,9 +373,18 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps): R
         ) : (
           <>
             <View style={[styles.listCard, { backgroundColor: P.cardBg, borderColor: P.cardBorder }]}>
-              <FlatList data={monthlyTransactions} keyExtractor={keyExtractor} renderItem={renderItem} scrollEnabled={false} />
+              <FlatList
+                data={monthlyTransactions}
+                keyExtractor={keyExtractor}
+                renderItem={renderItem}
+                scrollEnabled={false}
+              />
             </View>
-            <TouchableOpacity onPress={goToRelatorios} activeOpacity={0.7} style={[styles.seeMoreBtn, { borderColor: P.cardBorder }]}>
+            <TouchableOpacity
+              onPress={goToRelatorios}
+              activeOpacity={0.7}
+              style={[styles.seeMoreBtn, { borderColor: P.cardBorder }]}
+            >
               <Text style={[styles.seeMoreText, { color: accentColor }]}>Ver todos os relatórios</Text>
               <Feather name="chevron-right" size={14} color={accentColor} />
             </TouchableOpacity>
@@ -390,7 +436,7 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps): R
                   {TYPE_OPTIONS.map((opt) => {
                     const sel = form.type === opt.type;
                     let semColor = SEM.expense.text, semBg = SEM.expense.bg, semBdr = SEM.expense.border;
-                    if (opt.type === 'entrada')  { semColor = SEM.income.text;  semBg = SEM.income.bg;  semBdr = SEM.income.border; }
+                    if (opt.type === 'entrada')  { semColor = SEM.income.text;  semBg = SEM.income.bg;  semBdr = SEM.income.border;  }
                     if (opt.type === 'economia') { semColor = SEM.savings.text; semBg = SEM.savings.bg; semBdr = SEM.savings.border; }
                     return (
                       <TouchableOpacity
@@ -506,6 +552,27 @@ const styles = StyleSheet.create({
   loadingRow:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 28, gap: 10 },
   loadingText: { fontSize: 13 },
 
+  /*
+   * periodRow: faixa horizontal discreta que identifica o período de referência
+   * dos cards. Usa borda e fundo do cardBg para mesclar suavemente com o layout
+   * sem chamar atenção excessiva — o objetivo é informar, não destacar.
+   */
+  periodRow: {
+    flexDirection:    'row',
+    alignItems:       'center',
+    borderWidth:      1,
+    borderRadius:     8,
+    paddingHorizontal: 10,
+    paddingVertical:   7,
+    marginBottom:     12,
+    alignSelf:        'flex-start', // não ocupa a largura total — fica compacto
+  },
+  periodLabel: {
+    fontSize:      11,
+    fontWeight:    '500',
+    letterSpacing: 0.1,
+  },
+
   sectionLabel:  { fontSize: 11, fontWeight: '600', letterSpacing: 0.6, marginBottom: 12 },
   listHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, marginTop: 8 },
 
@@ -534,8 +601,6 @@ const styles = StyleSheet.create({
   seeMoreText: { fontSize: 13, fontWeight: '500' },
 
   // ── Modal ─────────────────────────────────────────────────────────────────
-  // KAV envolve o overlay: flex:1 permite que o KAV ocupe a tela inteira e
-  // empurre o sheet para cima quando o teclado aparecer.
   modalKbView:  { flex: 1 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   modalSheet: {
@@ -561,7 +626,6 @@ const styles = StyleSheet.create({
   typeBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 10, borderRadius: 8 },
   typeBtnText: { fontSize: 12 },
 
-  // Input monetário: sem prefixo externo — o "R$" faz parte do valor mascarado
   moneyInput: {
     borderWidth:       1,
     borderRadius:      8,
