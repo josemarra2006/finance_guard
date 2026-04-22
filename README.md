@@ -19,7 +19,7 @@
 
 <div align="center">
 
-# 💰 Finance Guard
+# 💰 Neurona
 
 ### Seu controle financeiro pessoal, offline-first, com IA integrada.
 
